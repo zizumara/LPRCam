@@ -1,0 +1,9 @@
+[Unit]
+Description=Launches the python script LPRCam.py.
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/LPRCam.sh
+
+[Install]
+WantedBy=multi-user.target

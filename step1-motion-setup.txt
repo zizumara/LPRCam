@@ -1,0 +1,75 @@
+This setup was copied from https://pimylifeup.com/raspberry-pi-webcam-server/comment-page-1/ and modified
+specifically for still image capture only.
+
+
+Update the Pi O/S:
+
+   sudo apt-get update
+   sudo apt-get upgrade
+
+For convenient access from Windows via Remote Desktop, install xrdp:
+
+   sudo apt-get install xrdp
+
+(or install PuTTY to access the Pi command line only)
+
+Connect the Pi camera and enable it via the desktop preferences menu or use the following:
+
+   sudo raspi-config
+
+Add the Pi camera as a v4l2 device to modules:
+
+   sudo modprobe bcm2835-v4l2
+
+(An alternate technique is to add bcm2835-v4l2 at the bottom of the /etc/modules file.)
+
+Reboot the Pi for the above changes to take effect:
+
+   sudo reboot
+
+Install the packages needed by Motion:
+
+   sudo apt install autoconf automake build-essential pkgconf libtool git libzip-dev libjpeg-dev gettext libmicrohttpd-dev 
+      libavformat-dev libavcodec-dev libavutil-dev libswscale-dev libavdevice-dev default-libmysqlclient-dev libpq-dev 
+      libsqlite3-dev libwebp-dev
+
+Get the Motion deb file for Raspian Buster from GitHub and install it:
+
+   sudo wget https://github.com/Motion-Project/motion/releases/download/release-4.3.1/pi_buster_motion_4.3.1-1_armhf.deb
+   sudo dpkg -i pi_buster_motion_4.3.1-1_armhf.deb
+
+Create and configure directories for pictures and movies:
+
+   sudo mkdir /motion
+   sudo chgrp motion /motion
+   sudo chmod a+rwx /motion
+
+Configure Motion (see motion-configuration.txt; use /motion as target_dir).
+
+Disable the Motion daemon by editing /etc/default/motion and setting start_motion_daemon=no
+
+Run the motion application:
+
+   motion -c /etc/motion/motion.conf
+
+Upon motion detection, the captured images will be stored in the /motion directory.  This directory needs to be 
+purged periodically to prevent from consuming all disk space.  Application logging is directed to stderr.
+
+
+RUNNING IN DAEMON MODE
+
+The application can also be run automatically in daemon mode at boot up by setting start_motion_daemon=no in 
+/etc/default/motion and setting daemon on in /etc/motion/motion.conf.  Whenever making changes to motion.conf, 
+the service must be restarted as follows:
+
+   sudo service motion restart
+
+The motion service can be stopped using the following:
+
+   sudo service motion stop
+
+To determine if the motion service is running, use
+
+   sudo service --status-all
+
+and verify that motion is preceded by '[+]'.  If the service is not running, this will be '[-]'.

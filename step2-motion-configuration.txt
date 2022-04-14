@@ -1,0 +1,80 @@
+Detailed information on configuration options can be found at
+https://motion-project.github.io/motion_config.html#vid_control_params
+
+After installation, save a copy of the original /etc/motion/motion.conf file.  Then make the following changes.
+
+daemon: on, off (default)
+   purpose: run motion as a daemon
+   recommendation: set to off
+
+stream_localhost: off, on (default)
+   purpose: limits the access to the stream to the localhost
+   recommendation: set to off
+
+movie_output: off, on (default)
+   purpose: creates a movie file from the stream
+   recommendation: set to off (not needed for this application and just slows down the Pi)
+
+width: (default 640)
+   purpose: sets the pixel width of each frame
+   recommendation: explicitly set to 640 for Pi camera to be sure
+
+height: (default 480)
+   purpose: sets the pixel height of each frame
+   recommendation: explicitly set to 480 for Pi camera to be sure
+
+picture_output: off, first, best, on (default)
+   purpose: determines whether and how to output image
+   recommendation: set to on
+
+target_dir: text
+   purpose: sets the directory in which to output pictures, movies, and snapshots
+   recommendation: set to /motion (refer to motion-setup.txt for more details)
+
+smart_mask_speed: 0-10, default 0 (off)
+   purpose: automatically filters out pixel changes in small areas of the image
+   recommendation: set to 5 if windy conditions cause false triggers
+
+lightswitch_percent: 0-100, default 0 (off)
+   purpose: suppresses motion detection when greater than this percentage of pixels change
+   recommendation: may be needed for sudden illumination changes from headlights or clouds
+
+lightswitch_frames: 1-1000, default 5
+   purpose: number of frames to ignore when lightswitch triggers
+   recommendation: tune if necessary
+
+minimum_motion_frames: 1-1000, default 1
+   purpose: number of frames tested for motion before motion event triggers
+   recommendation: increase to 2-5 if too many false triggers
+
+minimum_frame_time: 0-2147483647, default 0 (disabled - use framerate)
+   purpose: minimum number of seconds between capturing picture frames
+   recommendation: set to 1?
+
+framerate: 2-100, default 15
+   purpose: if minimum_frame_time set to 0, sets number of picture captures per second
+   recommendation:  set to 2?
+
+text_changes: on, off (default)
+   purpose: overlay image with text indicating number of pixels changed from reference image
+   recommendation: set to on
+
+noise_tune: off, on (default)
+   purpose: automatically adjust noise threshold to filter out camera noise
+   recommendation: leave at default (on)
+
+noise_level: 1-255; default 32
+   purpose: manually sets camera noise threshold when noise_tune is off
+   recommendation: use if camera noise is apparent in pictures
+
+threshold: 1-2147483647, default 1500
+   purpose: sets minimum number of pixels changed from reference image to trigger motion
+   recommendation: increase if too many false triggers
+
+threshold_tune: on, off (default)
+   purpose: when on, continuously adjusts threshold for declaring motion (ignores threshold)
+   recommendation: set to on if changed pixels is regularly above threshold for false triggers
+
+vid_control_params: text, up to 4095 chars
+   purpose: issues control parameters to camera (brightness, white level, etc.)
+   recommendation: may be useful for adjusting camera settings

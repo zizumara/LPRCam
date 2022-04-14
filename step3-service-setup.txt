@@ -1,0 +1,22 @@
+LPRCam Service Installation Instructions
+
+These instructions assume that LPRCam.py is located in /home/pi/projects/LPRCam.
+
+1. Copy LPRCam.sh to directory /usr/local/bin.
+
+2. Make sure LPRCam.sh is executable with
+
+      sudo chmod 755 /usr/local/bin/LPRCam.sh
+
+3. Copy LPRCam.service to directory /lib/systemd/system.
+
+4. Use the following to enable the service on startup.
+
+      sudo systemctl enable LPRCam
+      
+5. To check status after startup, use
+
+      sudo systemctl status LPRCam
+   
+   This should display status showing that LPRCam.service is loaded and 
+   the status is "active (running)".

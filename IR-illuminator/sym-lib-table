@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name IR-LED-driver-28-rescue)(type Legacy)(uri ${KIPRJMOD}/IR-LED-driver-28-rescue.lib)(options "")(descr ""))
+)
