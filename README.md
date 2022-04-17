@@ -16,3 +16,5 @@ This project includes the software and hardware design for a DIY motion-activate
 * Woods 55213143 16/2 Low Voltage Lighting Cable, 100-Feet (Amazon)
 
 For nighttime operation, when the ambient light sensor registers light below a configured level, software enables the IR illuminator and switches in the IR-cut filter on the camera module.
+
+![Camera Box Interior](front-open-annotated.jpg)
