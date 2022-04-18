@@ -1,0 +1,127 @@
+OS (Buster) installation preferences:
+
+* Disable automatic login as user Pi
+* Enable Pi camera, SSH, and optional interfaces
+
+
+Security enhancements:
+
+* Add new user with root privileges
+    sudo adduser myuser
+    sudo adduser myuser sudo
+
+* Reboot and login as user myuser
+
+* Remove user pi
+    sudo deluser -remove-home pi
+
+* Install package for unattended upgrades
+    sudo apt install unattended-upgrades
+
+* Edit the file /etc/apt/apt.conf.d/02peridioc and add the following lines:
+    APT::Periodic::Enable "1";
+    APT::Periodic::Update-Package-Lists "1";
+    APT::Periodic::Download-Upgradeable-Packages "1";
+    APT::Periodic::Unattended-Upgrade "1";
+    APT::Periodic::AutocleanInterval "1";
+    APT::Periodic::Verbose "2";
+
+* Test (debug) periodic update configuration:
+    sudo unattended-upgrades -d
+
+* Configure sudo to require a password.  Create /etc/sudoers.d/010_myuser-passwd with the 
+  following content:
+    myuser ALL=(ALL) PASSWD: ALL
+
+* Delete /etc/sudoers.d/010_pi-nopasswd (no longer needed).
+    sudo rm /etc/sudoers.d/010_pi-nopasswd
+
+* Verify that SSH root login is disabled and change default SSH port.  Edit file 
+  /etc/ssh/sshd_config. The line with PermitRootLogin should be commented out or 
+  should be missing.  Change the line
+    #Port 22
+  to
+    Port 2222
+  (NOTE: Any non-standard port above port 1024 can be used here.)
+
+* Restart the SSH service.
+    sudo service ssh restart
+
+* Install fail2ban.
+    sudo apt install fail2ban
+
+* Reboot and login via SSH port 2222.
+
+
+Increase swap space from 100 MB (default) to 2 GB (for make processes):
+
+    sudo fallocate --length 2GiB /root/2G.swap
+    sudo chmod 0600 /root/2G.swap
+    sudo mkswap /root/2G.swap
+    sudo swapon /root/2G.swap
+
+
+Install OpenALPR:
+
+    sudo apt install openalpr openalpr-daemon openalpr-utils libopenalpr-dev
+    cd /usr/share/openalpr/runtime_data/ocr/tessdata
+    sudo cp lus.traineddata ..
+
+
+Test OpenALPR:
+
+* Copy LPRCam/test/ea7the.jpg from PC to ~/test
+
+* Test OpenALPR
+    alpr -c us ~/test/ea7the.jpg
+  Output should show 10 results for plate0
+
+
+Install LPRserver:
+
+* Create main LPRserver directory
+    mkdir ~/web
+
+* Copy contents of LPRCam/web from PC to ~/web
+
+* Edit LPRserver.py and change RemoteIP = '192.168.1.66' to the address of the Raspberry Pi
+  hosting the LPR camera.
+  
+* Edit ~/web/cgi-bin/home.py and change location = 'My camera location' to whatever text 
+  should be displayed in each captured image.
+
+* Install OpenALPR configuration files
+    sudo chmod 777 /usr/share/openalpr/config
+    sudo chmod 777 /usr/share/openalpr/config/openalpr.defaults.conf
+    cp /usr/share/openalpr/config/openalpr.defaults.conf ~/web/openalpr-config/openalpr.defaults.save
+    cp ~/web/openalpr-config/openalpr.defaults.800x480 /usr/share/openalpr/config
+    cp ~/web/openalpr-config/openalpr.defaults.1600x960 /usr/share/openalpr/config
+
+* Install and test SSH keys
+    mkdir -p ~/.ssh
+    sudo chmod 0700 ~/.ssh
+    Run ssh-keygen and hit return for each prompt to accept defaults.
+    Repeat above 3 steps on remote LPRCam if ssh keys do not already exist there.
+    Copy the contents of the remote LPRCam file ~/.ssh/id_rsa.pub to local file ~/.ssh/authorized_keys.
+    Copy the contents of the local file ~/.ssh/id_rsa.pub to remote LPRCam file ~/.ssh/authorized_keys.
+    Run ssh pi@{remote host} and answer "yes" to add remote host as authorized host.
+    Login should succeed without requiring remote password.
+    Exit ssh shell using exit command.
+
+* Install and start LPRservice
+    sudo cp ~/web/LPRserver.sh /usr/local/bin
+    sudo chmod 755 /usr/local/bin/LPRserver.sh
+    sudo cp ~/web/LPRserver.service /lib/systemd/system
+    sudo systemctl enable LPRserver
+    sudo systemctl start LPRserver
+    sudo systemctl status LPRserver  (check status)
+
+* Install and start web server
+    sudo chmod 755 ~/web/cgi-bin/home.py
+    sudo chmod 755 ~/web/cgi-bin/viewfull.py
+    sudo cp ~/web/webserver.sh /usr/local/bin
+    sudo chmod 755 /usr/local/bin/webserver.sh
+    sudo cp ~/web/webserver.service /lib/systemd/system
+    sudo systemctl enable webserver
+    sudo systemctl start webserver
+    sudo systemctl status webserver  (check status)

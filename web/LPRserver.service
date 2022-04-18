@@ -1,0 +1,9 @@
+[Unit]
+Description=License Plate Reader File Server
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/LPRserver.sh
+
+[Install]
+WantedBy=multi-user.target

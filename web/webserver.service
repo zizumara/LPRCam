@@ -1,0 +1,10 @@
+[Unit]
+Description=Simple Web Server
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/webserver.sh
+
+[Install]
+WantedBy=multi-user.target
+
