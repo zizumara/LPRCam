@@ -1,3 +1,0 @@
-(sym_lib_table
-  (lib (name light-sensor-I2C-rescue)(type Legacy)(uri ${KIPRJMOD}/light-sensor-I2C-rescue.lib)(options "")(descr ""))
-)
