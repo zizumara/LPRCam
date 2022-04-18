@@ -82,7 +82,18 @@ Install LPRserver:
 * Create main LPRserver directory
     mkdir ~/web
 
-* Copy contents of LPRCam/web from PC to ~/web
+* Copy contents of LPRCam/web from PC to ~/web.
+
+* Create the following directories.
+    ~/web/analyzed
+    ~/web/images
+    ~/web/log
+    ~/web/results
+    ~/web/thumbnails
+
+* Change privileges on the log and analyzed directories.
+    sudo chmod 777 ~/web/log
+	sudo chmod 777 ~/web/analyzed
 
 * Edit LPRserver.py and change RemoteIP = '192.168.1.66' to the address of the Raspberry Pi
   hosting the LPR camera.
