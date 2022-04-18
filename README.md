@@ -17,6 +17,12 @@ This project includes the software and hardware design for a DIY motion-activate
 * Woods 55213143 16/2 Low Voltage Lighting Cable, 100-Feet (Amazon)
 * Red and green LEDs with 330 Ohm current limiting resistors
 * 26 AWG wiring with various Dupont connectors (KiCAD files included)
+* Clear Lexan sheet 0.08x7.6x11 inch or similar dimensions (Amazon)
+* Clear silicone waterproof sealant (Amazon)
+* Silicone modified conformal coating (Amazon)
+* 14 #3-48x1/2" steel screws (Fastenal or McMaster-Carr)
+* 12 #3-48x1/16" steel screws  (Fastenal or McMaster-Carr)
+* Microchip Pickit 4 programmer (for programming the custom light sensor)
 
 For nighttime operation, when the ambient light sensor registers light below a configured level, software enables the IR illuminator and switches in the IR-cut filter on the camera module.
 
