@@ -21,7 +21,7 @@ This project includes the software and hardware design for a DIY motion-activate
 * Clear Lexan sheet 0.08x7.6x11 inch or similar dimensions (Amazon)
 * Clear silicone waterproof sealant (Amazon)
 * Silicone modified conformal coating (Amazon)
-* 14 #3-48x1/2" steel screws (Fastenal or McMaster-Carr)
+* 22 #3-48x1/2" steel screws (Fastenal or McMaster-Carr)
 * 12 #3-48x1/16" steel screws  (Fastenal or McMaster-Carr)
 * Microchip Pickit 4 programmer (for programming the custom light sensor)
 * (Optional) Wireless Access Point (Amazon)
