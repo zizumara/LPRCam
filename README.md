@@ -24,6 +24,7 @@ This project includes the software and hardware design for a DIY motion-activate
 * 14 #3-48x1/2" steel screws (Fastenal or McMaster-Carr)
 * 12 #3-48x1/16" steel screws  (Fastenal or McMaster-Carr)
 * Microchip Pickit 4 programmer (for programming the custom light sensor)
+* (Optional) Wireless Access Point (Amazon)
 
 For nighttime operation, when the ambient light sensor registers light below a configured level, software enables the IR illuminator and switches in the IR-cut filter on the camera module.  The light level is used to select one of three different Motion configuration files which have mmalcam_control_params settings appropriate for daytime, twilight, and nighttime operation, respectively.  The light level is a time-averaged reading for which the width of the sampling window may be adjusted via the sensor I2C interface.
 
@@ -33,7 +34,7 @@ For nighttime operation, when the ambient light sensor registers light below a c
 
 The files included in the /web directory provide everything needed to create a web server for reviewing captured images and license plate numbers.  The web server runs on a separate Raspberry Pi 4B.  If the web server is to be accessible from the Internet, it is strongly recommended that the security hardening procedures be followed in setup.txt.
 
-During operation, captured files are periodically copied from the Pi Zero W to the web server via rsync.  The web server performs the CPU-intensive analysis of the captured images using OpenALPR to detect and read license plates.  The results are displayed on the web page, an example of which is shown below (for security reasons, plate numbers and actual camera location are blanked out in grey).
+During operation, captured files are periodically copied from the Pi Zero W to the web server via rsync.  A wireless access point may be needed if the camera box is not close to your wireless router.  The web server performs the CPU-intensive analysis of the captured images using OpenALPR to detect and read license plates.  The results are displayed on the web page, an example of which is shown below (for security reasons, plate numbers and actual camera location are blanked out in grey).
 
 ![Web Page](web-sample.png)
 
