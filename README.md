@@ -3,6 +3,7 @@
 
 This project includes the software and hardware design for a DIY motion-activated Raspberry Pi security camera.  The Linux Motion application is used to detect motion and capture images.  The following hardware is used for this project:
 * Raspberry Pi Zero W
+* Raspberry Pi 4 (for web server) -- minimum 2GB RAM, 4GB RAM recommended
 * Arducam 12.3 MP HQ camera with automatic IR-cut filter (www.arducam.com) -- photocell removed
 * Arducam 12mm CS-Mount Lens with Manual Focus and Adjustable Aperture (Amazon)
 * A custom IR illuminator (KiCAD files included)
