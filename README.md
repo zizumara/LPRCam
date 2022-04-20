@@ -4,7 +4,7 @@
 This project includes the software and hardware design for a DIY motion-activated Raspberry Pi security camera.  The Linux Motion application is used to detect motion and capture images.  The following hardware is used for this project:
 * Raspberry Pi Zero W
 * Pi Zero W 6" camera ribbon cable (Amazon)
-* Raspberry Pi 4 (for web server) -- minimum 2GB RAM; 4GB RAM recommended
+* Raspberry Pi 4 (for web server)
 * Arducam 12.3 MP HQ camera with automatic IR-cut filter (www.arducam.com) -- photocell removed
 * Arducam 12mm CS-Mount Lens with Manual Focus and Adjustable Aperture (Amazon)
 * A custom IR illuminator (KiCAD files included)
@@ -62,4 +62,4 @@ The following factors are the most significant in their effect on the performanc
 * Image capture rate: The Motion application may experience false positives for detecting motion due to changing lighting conditions.  In particular, windy, partly cloudy days often produce hundreds or even thousands of additional images per day, as the changing cloud shadows often cause significant numbers of pixels in the image to change intensity.  The threshold parameter in motion_day.conf sets the number of changed pixels to trigger motion capture.
 * Image transfer rate: Images are periodically transferred from the camera system to the web server for OpenALPR analysis using rsync.  If the image capture rate is large for an extended period, this can generate a large backlog of images to transfer.  The result may be that the web server gets behind by several hours in analyzing images.  The rsync bwlimit parameter is hardcoded in LPRserver.py at 600 kbps to avoid overloading the wireless network, but may be increased or eliminated.
 * ALPR masks: A portion of each image may be excluded from analysis by the OpenALPR application to reduce processing time for each image as defined by mask files.  Two mask files are provided in this archive, alpr-mask-1600x960.jpg and alpr-mask-800x480.jpg, which mask out the lower portion of the image where license plates are not expected to be found.  It may be necessary to replace or exclude these files.  Note that if renamed or excluded, the configuration files openalpr.defaults.1600x960 and openalpr.defaults.800x480 must be updated.
-* ALPR processing: OpenALPR consumes considerable CPU resources in analyzing each image, which can result in a significant processing backlog.  Performance can be improved by reducing image dimensions.  Note that this must be done for all the motion configuration files and the OpenALPR mask files.  Using hosting the web server on a Raspberry Pi 4 with more RAM may also improve performance.
+* ALPR processing: OpenALPR consumes considerable CPU resources in analyzing each image, which can result in a significant processing backlog.  Performance can be improved by reducing image dimensions.  Note that this must be done for all the motion configuration files and the OpenALPR mask files.
