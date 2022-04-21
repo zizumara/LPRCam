@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # LPRserver.py
+# Copyright 2022, John F. Gauthier, all rights reserved
 
 """
 This script periodically synchronizes a local images directory with a remote images directory
@@ -13,6 +14,42 @@ from pathlib import Path
 from PIL import Image
 
 THUMB_SIZE = (100,100)
+
+
+class Stats:
+
+    def __init__(self):
+        self.resultsAll = 0
+        self.resultsNoPlate = 0
+        self.resultsSmPlate = 0
+        self.resultsLgPlate = 0
+        self.resultsWithPlate = 0
+
+    def addNew(self, noPlate, smPlate, lgPlate):
+        self.resultsNoPlate += noPlate
+        self.resultsSmPlate += smPlate
+        self.resultsLgPlate += lgPlate
+        self.resultsWithPlate += smPlate + lgPlate
+        self.resultsAll += noPlate + smPlate + lgPlate
+        logging.info(f'{timestamp()} New results:'
+                     f' {noPlate} w/o plates,'
+                     f' {smPlate} w/plates from small image'
+                     f' {lgPlate} w/plates from large image.')
+        if self.resultsAll == 0:
+            pctWithPlate = 0.0
+        else:
+            pctWithPlate = self.resultsWithPlate/self.resultsAll
+        if self.resultsWithPlate == 0:
+            pctSmPlate = 0.0
+            pctLgPlate = 0.0
+        else:
+            pctSmPlate = 100 * self.resultsSmPlate/self.resultsWithPlate
+            pctLgPlate = 100 * self.resultsLgPlate/self.resultsWithPlate
+        logging.info(f'{timestamp()} Since start: {self.resultsAll} images,'
+                     f' {pctWithPlate:.2f}% with plates,'
+                     f' {pctSmPlate:.2f}% from small images,'
+                     f' {pctLgPlate:.2f}% from large images.')
+
 
 def timestamp():
     """
@@ -38,7 +75,7 @@ def syncImageFiles(localUser, src, dest):
     pwRecord = pwd.getpwnam(localUser)
     localUserUID = pwRecord.pw_uid
     localUserGID = pwRecord.pw_gid
-    syncCmd = ['rsync', '-zr', '--bwlimit=600', '--delete', src, dest]
+    syncCmd = ['rsync', '-zr', '--bwlimit=400', '--delete', src, dest]
     logging.info(f'{timestamp()} Syncing image files...')
     proc = subprocess.Popen(syncCmd, preexec_fn=demoteUser(localUserUID, localUserGID))
     result = proc.wait()
@@ -105,18 +142,7 @@ def summarizeResult(resultDict):
                 summary = ''.join([summary, candStr])
     return summary
 
-def setAlprDefaultConfig(configFilePath):
-    """
-    Replace the current openalpr.defaults.conf file with the specified defaults
-    config file.  This supports the need to change the path to the mask file depending
-    on the dimensions of the image being processed.
-    """
-    if path.exists(configFilePath):
-        cmd = ['cp', configFilePath, '/usr/share/openalpr/config/openalpr.defaults.conf']
-        proc = subprocess.run(cmd, capture_output=False)
-
-
-def updateResults(imageDir, resultDir, tempDir, alprCfgDir):
+def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
     """
     Given a directory containing image files and a directory containing JSON files
     of alpr results, run alpr on the images that do not already have result files.
@@ -150,8 +176,8 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir):
         resultFilename = imageFilename.replace('.jpg', '.json')
         resultFilePath = path.join(resultDir, resultFilename)
         if not path.exists(resultFilePath):
-            setAlprDefaultConfig(f'{alprCfgDir}/openalpr.defaults.800x480')
-            cmd = ['alpr', '-c us', '-j', imageFilePath]
+            configFile = f'{alprCfgDir}/openalpr.defaults.800x480'
+            cmd = ['alpr', '-c us', f'--config {configFile}', '-j', imageFilePath]
             proc = subprocess.run(cmd, capture_output=True, text=True)
             if proc.returncode != 0 and proc.returncode != 1:
                 logging.info(f'{timestamp()} '
@@ -168,8 +194,8 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir):
                         resizedImage = tempImage.resize((newWidth, newHeight), resample=Image.LANCZOS)
                         resizedImagePath = path.join(tempDir, 'resizedImage.jpg')
                         resizedImage.save(resizedImagePath ,'JPEG')
-                        setAlprDefaultConfig(f'{alprCfgDir}/openalpr.defaults.1600x960')
-                        cmd = ['alpr', '-c us', '-j', resizedImagePath]
+                        configFile = f'{alprCfgDir}/openalpr.defaults.1600x960'
+                        cmd = ['alpr', '-c us', f'--config {configFile}', '-j', resizedImagePath]
                         proc = subprocess.run(cmd, capture_output=True, text=True)
                         if proc.returncode != 0 and proc.returncode != 1:
                             logging.info(f'{timestamp()}'
@@ -188,16 +214,14 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir):
                 resultFileH.close()
                 #resultSummary = summarizeResult(responseDict)
                 #logging.info(f'{timestamp()} {imageFilename} result: {resultSummary}')
-    logging.info(f'{timestamp()} New results: {emptyResultsCreated} w/o plates, '
-                 f'{origResultsCreated} w/plates from original image, '
-                 f'{resizeResultsCreated} w/plates from resized image.')
+    stats.addNew(emptyResultsCreated, origResultsCreated, resizeResultsCreated)
 
 #########################################################################################
 # MAIN
 
-localUser    = 'myuser'
+localUser    = 'pizzle'
 remoteUser   = 'pi'
-remoteIP     = '192.168.1.66'
+remoteIP     = '192.168.1.68'
 remoteDir    = f'/home/{remoteUser}/projects/LPRCam/capt_images/'
 src          = f'{remoteUser}@{remoteIP}:{remoteDir}'
 dest         = f'/home/{localUser}/web/images/'
@@ -212,12 +236,13 @@ chdir(f'/home/{localUser}/web')
 logHandlers = (logging.StreamHandler(sys.stdout), logging.FileHandler('./LPRserver.log', mode='w'))
 logging.basicConfig(format='%(message)s', level=logging.INFO, handlers=logHandlers)
 logging.info(f'{timestamp()} Running LPRserver.py CGI script...')
+stats = Stats()
 
 while True:
     syncImageFiles(localUser, src, dest)
     imageCount = updateThumbnails(imageDir, thumbnailDir)
     logging.info(f'{timestamp()} {imageCount} images found.')
-    updateResults(imageDir, resultDir, tempDir, alprCfgDir)
+    updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats)
 
     # If the exit flag file is found, remove the flag file and perform a graceful exit.
     if path.exists('./exitFlag'):
