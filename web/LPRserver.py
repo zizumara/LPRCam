@@ -8,13 +8,17 @@ that is populated with a motion activated camera.  It also generates thumbnail i
 the original images.
 """
 
-import sys, subprocess, pwd, logging, time, fnmatch, json
+from multiprocessing import Pool
+import sys, subprocess, pwd, logging, time, datetime, fnmatch, json, shutil
 from os import path, listdir, remove, setgid, setuid, chdir
 from pathlib import Path
 from PIL import Image
 
 THUMB_SIZE = (100,100)
-
+IMG_SKIPPED  = 0
+IMG_NO_PLATE = 1
+IMG_SM_PLATE = 2
+IMG_LG_PLATE = 3
 
 class Stats:
 
@@ -24,17 +28,28 @@ class Stats:
         self.resultsSmPlate = 0
         self.resultsLgPlate = 0
         self.resultsWithPlate = 0
+        self.newResultsNoPlate = 0
+        self.newResultsSmPlate = 0
+        self.newResultsLgPlate = 0
 
-    def addNew(self, noPlate, smPlate, lgPlate):
-        self.resultsNoPlate += noPlate
-        self.resultsSmPlate += smPlate
-        self.resultsLgPlate += lgPlate
-        self.resultsWithPlate += smPlate + lgPlate
-        self.resultsAll += noPlate + smPlate + lgPlate
+    def addNew(self, noPlate=0, smPlate=0, lgPlate=0):
+        self.newResultsNoPlate += noPlate
+        self.newResultsSmPlate += smPlate
+        self.newResultsLgPlate += lgPlate
+
+    def report(self):
         logging.info(f'{timestamp()} New results:'
-                     f' {noPlate} w/o plates,'
-                     f' {smPlate} w/plates from small image'
-                     f' {lgPlate} w/plates from large image.')
+                     f' {self.newResultsNoPlate} w/o plates,'
+                     f' {self.newResultsSmPlate} w/plates from small image'
+                     f' {self.newResultsLgPlate} w/plates from large image.')
+        self.resultsNoPlate += self.newResultsNoPlate
+        self.resultsSmPlate += self.newResultsSmPlate
+        self.resultsLgPlate += self.newResultsLgPlate
+        self.resultsWithPlate += self.newResultsSmPlate + self.newResultsLgPlate
+        self.resultsAll += self.newResultsSmPlate + self.newResultsLgPlate + self.newResultsNoPlate
+        self.newResultsNoPlate = 0
+        self.newResultsSmPlate = 0
+        self.newResultsLgPlate = 0
         if self.resultsAll == 0:
             pctWithPlate = 0.0
         else:
@@ -50,13 +65,26 @@ class Stats:
                      f' {pctSmPlate:.2f}% from small images,'
                      f' {pctLgPlate:.2f}% from large images.')
 
+# End class Stats
+
 
 def timestamp():
     """
-    Return the current time formatted as yyyy-mm-dd HH:MM:SS.
+    Return the current time formatted as yyyy-mmm-dd HH:MM:SS.
     """
 
     return time.strftime('%Y-%b-%d %H:%M:%S')
+
+def fileTimeStr(daysInPast=None):
+    """
+    Return either the current time or the time some number of days in the past, formatted
+    as yyyymmddHHMMSS (suitable for comparing captured image file names).
+    """
+    if daysInPast == None:
+        return time.strftime('%Y%m%d%H%M%S')
+    else:
+        oldDate = datetime.datetime.now() - datetime.timedelta(daysInPast)
+        return oldDate.strftime('%Y%m%d%H%M%S')
 
 def demoteUser(uid, gid):
     """
@@ -66,19 +94,38 @@ def demoteUser(uid, gid):
     setgid(gid)
     setuid(uid)
 
-def syncImageFiles(localUser, src, dest):
+def syncImageFiles(localUser, remoteDir, localDir, procDir, oldestDays):
     """
-    Synchronize the files in the src directory with the files in the dest directory using
-    rsync.  Delete any files in the dest directory that are not in the src directory.
+    Synchronize the files in the local directory with the files in the remote directory using
+    rsync (also removes files in the local directory that are not in the remote directory).
+    Next, remove files in the processing directory that are older than oldestDays.  Finally,
+    copy any files that are not already in the processing directory from the local directory
+    to the processing directory.
     """
 
     pwRecord = pwd.getpwnam(localUser)
     localUserUID = pwRecord.pw_uid
     localUserGID = pwRecord.pw_gid
-    syncCmd = ['rsync', '-zr', '--bwlimit=400', '--delete', src, dest]
+    syncCmd = ['rsync', '-zr', '--bwlimit=400', '--delete', remoteDir, localDir]
     logging.info(f'{timestamp()} Syncing image files...')
     proc = subprocess.Popen(syncCmd, preexec_fn=demoteUser(localUserUID, localUserGID))
     result = proc.wait()
+    oldestFilePrefix = fileTimeStr(daysInPast=oldestDays)
+    syncFiles = sorted(listdir(localDir))
+    procFiles = sorted(listdir(procDir))
+    filesRemoved = 0
+    for fileName in procFiles:
+        if fileName < oldestFilePrefix:
+            filePath = path.join(procDir, fileName)
+            remove(filePath)
+            filesRemoved += 1
+    logging.info(f'{timestamp()} Removed {filesRemoved} images older than {oldestDays} days.')
+    newFiles = [file for file in syncFiles if file not in procFiles]
+    filesCopied = 0
+    for fileName in newFiles:
+        filePath = path.join(localDir, fileName)
+        shutil.copy2(filePath, procDir)
+        filesCopied += 1
 
 def updateThumbnails(imageDir, thumbnailDir):
     """
@@ -142,10 +189,11 @@ def summarizeResult(resultDict):
                 summary = ''.join([summary, candStr])
     return summary
 
-def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
+def updateResults(imageDir, resultDir, alprCfgDir, stats):
     """
     Given a directory containing image files and a directory containing JSON files
-    of alpr results, run alpr on the images that do not already have result files.
+    of alpr results, run alpr on the images that do not already have result files,
+    using subprocess.Pool to take advantage of multiple cores.
     Remove any old result files if their corresponding image files no longer exist.
     """
 
@@ -166,12 +214,27 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
     # Create results files for image files that don't already have them.
     imagePathIter = Path(imageDir)
     imagePathList = [str(file) for file in imagePathIter.glob('*.jpg')]
-    emptyResultsCreated = 0
-    origResultsCreated = 0
-    resizeResultsCreated = 0
-    for imageFilePath in sorted(imagePathList):
-        if path.exists('./exitFlag'):
-            break
+    imagePathList = sorted(imagePathList)
+    pool = Pool()
+    resultList = pool.map(processALPR, imagePathList)
+    pool.close()
+    for result in resultList:
+        if result == IMG_NO_PLATE:
+            stats.addNew(noPlate=1)
+        elif result == IMG_SM_PLATE:
+            stats.addNew(smPlate=1)
+        elif result == IMG_LG_PLATE:
+            stats.addNew(lgPlate=1)
+    stats.report()
+
+def processALPR(imageFilePath):
+    """
+    Run the given image through OpenALPR and generate a .JSON results file.  If no plate
+    was found in the original image, resize it to twice the original size and try again.
+    """
+
+    resultStatus = IMG_SKIPPED
+    if not path.exists('./exitFlag'):
         imageFilename = path.basename(imageFilePath)
         resultFilename = imageFilename.replace('.jpg', '.json')
         resultFilePath = path.join(resultDir, resultFilename)
@@ -180,22 +243,21 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
             cmd = ['alpr', '-c us', f'--config {configFile}', '-j', imageFilePath]
             proc = subprocess.run(cmd, capture_output=True, text=True)
             if proc.returncode != 0 and proc.returncode != 1:
-                logging.info(f'{timestamp()} '
-                             f'ERROR: alpr returned error code {proc.returncode}.')
+                logging.info(f'{timestamp()} ERROR: alpr returned error code {proc.returncode}.')
             else:
                 responseText = proc.stdout
                 responseDict = json.loads(responseText)
                 if len(responseDict['results']) > 0:
-                    origResultsCreated += 1
+                    resultStatus = IMG_SM_PLATE
                 else:
                     try:
                         tempImage = Image.open(imageFilePath)
                         (newWidth, newHeight) = (tempImage.width * 2, tempImage.height * 2)
                         resizedImage = tempImage.resize((newWidth, newHeight), resample=Image.LANCZOS)
-                        resizedImagePath = path.join(tempDir, 'resizedImage.jpg')
-                        resizedImage.save(resizedImagePath ,'JPEG')
+                        resizedFilePath = path.join('./temp', imageFilename)
+                        resizedImage.save(resizedFilePath ,'JPEG')
                         configFile = f'{alprCfgDir}/openalpr.defaults.1600x960'
-                        cmd = ['alpr', '-c us', f'--config {configFile}', '-j', resizedImagePath]
+                        cmd = ['alpr', '-c us', f'--config {configFile}', '-j', resizedFilePath]
                         proc = subprocess.run(cmd, capture_output=True, text=True)
                         if proc.returncode != 0 and proc.returncode != 1:
                             logging.info(f'{timestamp()}'
@@ -204,9 +266,10 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
                             responseText = proc.stdout
                             responseDict = json.loads(responseText)
                             if len(responseDict['results']) > 0:
-                                resizeResultsCreated += 1
+                                resultStatus = IMG_LG_PLATE
                             else:
-                                emptyResultsCreated += 1
+                                resultStatus = IMG_NO_PLATE
+                        remove(resizedFilePath)
                     except:
                         logging.info(f'{timestamp()} ERROR: exception processing resized image.')
                 resultFileH = open(resultFilePath, 'w')
@@ -214,7 +277,8 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
                 resultFileH.close()
                 #resultSummary = summarizeResult(responseDict)
                 #logging.info(f'{timestamp()} {imageFilename} result: {resultSummary}')
-    stats.addNew(emptyResultsCreated, origResultsCreated, resizeResultsCreated)
+    return resultStatus
+
 
 #########################################################################################
 # MAIN
@@ -222,15 +286,14 @@ def updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats):
 localUser    = 'pizzle'
 remoteUser   = 'pi'
 remoteIP     = '192.168.1.68'
-remoteDir    = f'/home/{remoteUser}/projects/LPRCam/capt_images/'
-src          = f'{remoteUser}@{remoteIP}:{remoteDir}'
-dest         = f'/home/{localUser}/web/images/'
+remoteDir    = f'{remoteUser}@{remoteIP}:/home/{remoteUser}/projects/LPRCam/capt_images/'
+localDir     = f'/home/{localUser}/web/sync/'
 alprCfgDir   = f'/home/{localUser}/web/openalpr-config/'
 imageDir     = './images'
 thumbnailDir = './thumbnails'
 resultDir    = './results'
-tempDir      = './temp'
-updInterval  = 300.0
+updInterval  = 300.0  # Delay between attempts to sync files from camera system
+oldestDays   = 3.0    # Remove captured images older than this
 
 chdir(f'/home/{localUser}/web')
 logHandlers = (logging.StreamHandler(sys.stdout), logging.FileHandler('./LPRserver.log', mode='w'))
@@ -239,10 +302,14 @@ logging.info(f'{timestamp()} Running LPRserver.py CGI script...')
 stats = Stats()
 
 while True:
-    syncImageFiles(localUser, src, dest)
+    if path.exists('./exitFlag'):
+        logging.info(f'{timestamp()} Exit flag file found.  Quitting.')
+        remove('./exitFlag')
+        break
+    syncImageFiles(localUser, remoteDir, localDir, imageDir, oldestDays)
     imageCount = updateThumbnails(imageDir, thumbnailDir)
-    logging.info(f'{timestamp()} {imageCount} images found.')
-    updateResults(imageDir, resultDir, tempDir, alprCfgDir, stats)
+    logging.info(f'{timestamp()} {imageCount} images available.')
+    updateResults(imageDir, resultDir, alprCfgDir, stats)
 
     # If the exit flag file is found, remove the flag file and perform a graceful exit.
     if path.exists('./exitFlag'):
