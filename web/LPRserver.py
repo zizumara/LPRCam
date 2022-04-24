@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 # LPRserver.py
-# Copyright 2022, John F. Gauthier, all rights reserved
 
 """
 This script periodically synchronizes a local images directory with a remote images directory
@@ -31,11 +30,18 @@ class Stats:
         self.newResultsNoPlate = 0
         self.newResultsSmPlate = 0
         self.newResultsLgPlate = 0
+        self.sumSmConfidence = 0.0
+        self.sumLgConfidence = 0.0
 
-    def addNew(self, noPlate=0, smPlate=0, lgPlate=0):
+    def addNew(self, noPlate=0, smPlate=0, lgPlate=0, confid=None):
         self.newResultsNoPlate += noPlate
         self.newResultsSmPlate += smPlate
         self.newResultsLgPlate += lgPlate
+        if not confid == None:
+            if not smPlate == 0:
+                self.sumSmConfidence += confid
+            elif not lgPlate == 0:
+                self.sumLgConfidence += confid
 
     def report(self):
         logging.info(f'{timestamp()} New results:'
@@ -50,20 +56,28 @@ class Stats:
         self.newResultsNoPlate = 0
         self.newResultsSmPlate = 0
         self.newResultsLgPlate = 0
+        avgSmConfid = 0.0
+        avgLgConfid = 0.0
         if self.resultsAll == 0:
             pctWithPlate = 0.0
         else:
-            pctWithPlate = self.resultsWithPlate/self.resultsAll
+            pctWithPlate = 100 * self.resultsWithPlate/self.resultsAll
         if self.resultsWithPlate == 0:
             pctSmPlate = 0.0
             pctLgPlate = 0.0
         else:
             pctSmPlate = 100 * self.resultsSmPlate/self.resultsWithPlate
             pctLgPlate = 100 * self.resultsLgPlate/self.resultsWithPlate
+            if not self.resultsSmPlate == 0:
+                avgSmConfid = self.sumSmConfidence/self.resultsSmPlate
+            if not self.resultsLgPlate == 0:
+                avgLgConfid = self.sumLgConfidence/self.resultsLgPlate
         logging.info(f'{timestamp()} Since start: {self.resultsAll} images,'
                      f' {pctWithPlate:.2f}% with plates,'
                      f' {pctSmPlate:.2f}% from small images,'
                      f' {pctLgPlate:.2f}% from large images.')
+        logging.info(f'{timestamp()} Average confidence:'
+                     f' small image {avgSmConfid:.1f}, large image {avgLgConfid:.1f}.')
 
 # End class Stats
 
@@ -219,12 +233,12 @@ def updateResults(imageDir, resultDir, alprCfgDir, stats):
     resultList = pool.map(processALPR, imagePathList)
     pool.close()
     for result in resultList:
-        if result == IMG_NO_PLATE:
+        if result[0] == IMG_NO_PLATE:
             stats.addNew(noPlate=1)
-        elif result == IMG_SM_PLATE:
-            stats.addNew(smPlate=1)
-        elif result == IMG_LG_PLATE:
-            stats.addNew(lgPlate=1)
+        elif result[0] == IMG_SM_PLATE:
+            stats.addNew(smPlate=1, confid=result[1])
+        elif result[0] == IMG_LG_PLATE:
+            stats.addNew(lgPlate=1, confid=result[1])
     stats.report()
 
 def processALPR(imageFilePath):
@@ -234,6 +248,7 @@ def processALPR(imageFilePath):
     """
 
     resultStatus = IMG_SKIPPED
+    confidence = None
     if not path.exists('./exitFlag'):
         imageFilename = path.basename(imageFilePath)
         resultFilename = imageFilename.replace('.jpg', '.json')
@@ -249,6 +264,7 @@ def processALPR(imageFilePath):
                 responseDict = json.loads(responseText)
                 if len(responseDict['results']) > 0:
                     resultStatus = IMG_SM_PLATE
+                    confidence = responseDict['results'][0]['confidence']
                 else:
                     try:
                         tempImage = Image.open(imageFilePath)
@@ -267,6 +283,7 @@ def processALPR(imageFilePath):
                             responseDict = json.loads(responseText)
                             if len(responseDict['results']) > 0:
                                 resultStatus = IMG_LG_PLATE
+                                confidence = responseDict['results'][0]['confidence']
                             else:
                                 resultStatus = IMG_NO_PLATE
                         remove(resizedFilePath)
@@ -277,7 +294,7 @@ def processALPR(imageFilePath):
                 resultFileH.close()
                 #resultSummary = summarizeResult(responseDict)
                 #logging.info(f'{timestamp()} {imageFilename} result: {resultSummary}')
-    return resultStatus
+    return (resultStatus, confidence)
 
 
 #########################################################################################
