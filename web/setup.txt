@@ -87,6 +87,7 @@ Install LPRserver:
 * Create the following directories.
     ~/web/analyzed
     ~/web/images
+    ~/web/sync
     ~/web/log
     ~/web/results
     ~/web/thumbnails
