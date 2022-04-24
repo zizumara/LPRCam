@@ -283,7 +283,7 @@ def processALPR(imageFilePath):
 #########################################################################################
 # MAIN
 
-localUser    = 'pizzle'
+localUser    = 'myuser'
 remoteUser   = 'pi'
 remoteIP     = '192.168.1.68'
 remoteDir    = f'{remoteUser}@{remoteIP}:/home/{remoteUser}/projects/LPRCam/capt_images/'
