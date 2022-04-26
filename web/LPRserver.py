@@ -121,25 +121,24 @@ def syncImageFiles(localUser, remoteDir, localDir, procDir, oldestDays):
     localUserUID = pwRecord.pw_uid
     localUserGID = pwRecord.pw_gid
     syncCmd = ['rsync', '-zr', '--bwlimit=400', '--delete', remoteDir, localDir]
-    logging.info(f'{timestamp()} Syncing image files...')
     proc = subprocess.Popen(syncCmd, preexec_fn=demoteUser(localUserUID, localUserGID))
     result = proc.wait()
     oldestFilePrefix = fileTimeStr(daysInPast=oldestDays)
     syncFiles = sorted(listdir(localDir))
     procFiles = sorted(listdir(procDir))
-    filesRemoved = 0
+    imagesRemoved = 0
     for fileName in procFiles:
         if fileName < oldestFilePrefix:
             filePath = path.join(procDir, fileName)
             remove(filePath)
-            filesRemoved += 1
-    logging.info(f'{timestamp()} Removed {filesRemoved} images older than {oldestDays} days.')
-    newFiles = [file for file in syncFiles if file not in procFiles]
-    filesCopied = 0
-    for fileName in newFiles:
+            imagesRemoved += 1
+    newFileList = [file for file in syncFiles if file not in procFiles]
+    newImages = 0
+    for fileName in newFileList:
         filePath = path.join(localDir, fileName)
         shutil.copy2(filePath, procDir)
-        filesCopied += 1
+        newImages += 1
+    return (imagesRemoved, newImages)
 
 def updateThumbnails(imageDir, thumbnailDir):
     """
@@ -173,17 +172,18 @@ def updateThumbnails(imageDir, thumbnailDir):
     for imageFilePath in sorted(imagesPathList):
         if path.exists('./exitFlag'):
             break
-        thumbFilename = path.basename(imageFilePath).replace('.jpg', '_thm.jpg')
-        thumbFilePath = path.join(thumbnailDir, thumbFilename)
-        if not path.exists(thumbFilePath):
-            try:
-                srcImage = Image.open(imageFilePath)
-            except:
-                logging.info(f'{timestamp()} ERROR: Unable to open {imageFilePath} as image.')
-            else:
-                srcImage.thumbnail(THUMB_SIZE)
-                srcImage.save(thumbFilePath)
-                thumbsCreated += 1
+        if not path.getsize(imageFilePath) == 0:
+            thumbFilename = path.basename(imageFilePath).replace('.jpg', '_thm.jpg')
+            thumbFilePath = path.join(thumbnailDir, thumbFilename)
+            if not path.exists(thumbFilePath):
+                try:
+                    srcImage = Image.open(imageFilePath)
+                except:
+                    logging.info(f'{timestamp()} ERROR: Unable to open {imageFilePath} as image.')
+                else:
+                    srcImage.thumbnail(THUMB_SIZE)
+                    srcImage.save(thumbFilePath)
+                    thumbsCreated += 1
     #logging.info(f'{timestamp()} Created {thumbsCreated} new thumbnail files.')
     return imageCount
 
@@ -207,8 +207,8 @@ def updateResults(imageDir, resultDir, alprCfgDir, stats):
     """
     Given a directory containing image files and a directory containing JSON files
     of alpr results, run alpr on the images that do not already have result files,
-    using subprocess.Pool to take advantage of multiple cores.
-    Remove any old result files if their corresponding image files no longer exist.
+    using subprocess.Pool to take advantage of multiple cores.  Remove any old result
+    files if their corresponding image files no longer exist.
     """
 
     #logging.info(f'{timestamp()} Updating license plate results...')
@@ -249,7 +249,7 @@ def processALPR(imageFilePath):
 
     resultStatus = IMG_SKIPPED
     confidence = None
-    if not path.exists('./exitFlag'):
+    if not path.exists('./exitFlag') and not path.getsize(imageFilePath) == 0:
         imageFilename = path.basename(imageFilePath)
         resultFilename = imageFilename.replace('.jpg', '.json')
         resultFilePath = path.join(resultDir, resultFilename)
@@ -323,9 +323,11 @@ while True:
         logging.info(f'{timestamp()} Exit flag file found.  Quitting.')
         remove('./exitFlag')
         break
-    syncImageFiles(localUser, remoteDir, localDir, imageDir, oldestDays)
+    logging.info(f'{timestamp()} Syncing image files...')
+    (imagesRemoved, newImages) = syncImageFiles(localUser, remoteDir, localDir, imageDir, oldestDays)
     imageCount = updateThumbnails(imageDir, thumbnailDir)
-    logging.info(f'{timestamp()} {imageCount} images available.')
+    logging.info(f'{timestamp()} {imagesRemoved} old images removed, '
+                 f'{newImages} new images added, {imageCount} now available.')
     updateResults(imageDir, resultDir, alprCfgDir, stats)
 
     # If the exit flag file is found, remove the flag file and perform a graceful exit.
