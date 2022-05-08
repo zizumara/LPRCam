@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-# Copyright 2021 John F. Gauthier
 
 """
 home.py:
@@ -14,7 +13,7 @@ sys.path.append(getcwd())
 import levenshtein
 
 THUMB_SIZE = (100,100)
-location = 'My camera location'
+location = '3300 Faith Creek Lane facing north'
 
 class CaptureResults:
 
@@ -107,13 +106,14 @@ def fnameToFmtDateTime(fname):
     """
     Convert a file base name from format 'yyyymmddHHMMSS-0n' to date and time tuple
     formatted as 'yyyy-mm-dd' and 'HH:MM:SS n'.  The base name may include the
-    optional suffix '-d|t|nLLL' indicating the capture condition day, twilight, or
-    night and the darkness level LLL.  Return the lighting suffix if supplied.
+    optional suffix '-d|t|u|nLLL' indicating the capture condition day, day-twilight,
+    night-twilight, or night and the darkness level LLL.  Return the lighting suffix
+    if supplied.
     """
     fdate = 'yyyy-mm-dd'
     ftime = 'HH:MM:SS \#n'
     light = '????'
-    pattern = re.compile('(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\-0(\d)(\-([dtn]\d{3}))*')
+    pattern = re.compile('(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\-0(\d)(\-([a-z]\d{3}))*')
     m = pattern.match(fname)
     if m == None:
         logging.info(f'ERROR: {fname} file name not in expected format.')

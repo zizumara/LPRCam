@@ -6,6 +6,7 @@ CGI script to view a full image from a street security camera.
 
 import sys, logging, time, json
 from os import path, listdir
+from PIL import Image, ExifTags
 import cgi
 
 def timestamp():
@@ -167,10 +168,21 @@ else:
     fname = form['fname'].value
     #logging.info(f'{timestamp()} Requested view of {fname}.')
     fpath = path.join('./images', fname)
+    exif = 'Image metadata: '
     if not path.exists(fpath):
         logging.info(f'{timestamp()} Image file {fpath} not found.')
     else:
         fileExists = True
+        try:
+            tempImage = Image.open(fpath)
+            exifDict = { ExifTags.TAGS[k]: v for k, v in tempImage._getexif().items() if k in ExifTags.TAGS}
+            if 'ImageDescription' in exifDict:
+                exif += exifDict['ImageDescription']
+            else:
+                logging.info(f'{timestamp()} No EXIF data found in {fname}.')
+            tempImage.close()
+        except:
+            logging.info(f'{timestamp()} Unable to read EXIF data from {fname}.')
 if not 'from' in form:
     startFrom = ''
 else:
@@ -267,7 +279,7 @@ if not seaIn == '':
 if not thrIn == '':
     print(f'<input type="hidden" id="thr" name="thr" value="{thrIn}">')
 print('</form>')
-
+print(f'<p>{exif}')
 print('</body>')
 
 #logging.info(f'{timestamp()} CGI script finished.')
