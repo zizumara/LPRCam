@@ -4,7 +4,7 @@
 """
 This program operates a street security camera and captures images using
 the Motion application.  It also reads the current light level from a
-custom light sensor, switches a custom IR illuminator on/off, and controls
+custom light sensor, switches an IR illuminator on/off, and controls
 an IR-cut filter on the camera.
 """
 
@@ -39,9 +39,11 @@ REFRESH_SEC = 600     # seconds to refresh light level sliding average window
 installDir             = '/home/pi/projects/LPRCam/'
 motionImageDir         = '/motion'
 dayMotionCfgFilePath   = '/home/pi/projects/LPRCam/motion_day.conf'
-twilightMotionCfgFilePath  = '/home/pi/projects/LPRCam/motion_twilight.conf'
+dayTwiMotionCfgFilePath  = '/home/pi/projects/LPRCam/motion_day_twilight.conf'
+nightTwiMotionCfgFilePath  = '/home/pi/projects/LPRCam/motion_night_twilight.conf'
 nightMotionCfgFilePath = '/home/pi/projects/LPRCam/motion_night.conf'
-coords = {'longitude' : -77.04, 'latitude' : 38.91 }
+rtdataFilePath         = '/usr/share/openalpr/runtime_data'
+coords = {'longitude' : -97.23, 'latitude' : 32.81 }
 
 timeNextReport   = time.time()
 startTime        = time.time()
@@ -108,11 +110,20 @@ def stageMotionImages(motionDir, processDir, diagDir, dayTwilightNight, lightLev
     """
     Check the Motion output directory for new images.  Move all of the image files
     found to the image processing directory, adding a suffix to the file name which
-    indicates whether it is currently day, twilight, or night and the current
-    light level.
+    indicates whether it is currently day, day-twilight, night-twilight, or night 
+    and the current light level.
     Returns: imagesMoved - number of motion images moved to processing
     """
-    imgSuffix = f'{dayTwilightNight[0]}{lightLevel:03d}'
+    illumID = 'd'
+    if dayTwilightNight == 'day':
+        illumID = 'd'
+    elif dayTwilightNight == 'day-twilight':
+        illumID = 't'
+    elif dayTwilightNight == 'night-twilight':
+        illumID = 'u'
+    elif dayTwilightNight == 'night':
+        illumID = 'n'
+    imgSuffix = f'{illumID}{lightLevel:03d}'
     pathIter = Path(motionDir)
     motionImagePaths = [str(file) for file in pathIter.glob('*.jpg') if not str(file).endswith('m.jpg')]
     imagesMoved = 0
@@ -224,7 +235,7 @@ def initLightMeter(i2c):
 
     return i2cOK, levelNow, levelAvg
 
-def getDayOrNightLevel(i2c, currDayOrNight, twilightLevelCfg, nightLevelCfg):
+def getDayOrNightLevel(i2c, currDayOrNight, dayTwiLevelCfg, nightTwiLevelCfg, nightLevelCfg):
     """
     Using a light sensor connected via I2C, read the current average value of
     ambient darkness and compare it to the trigger levels supplied for twilight
@@ -234,8 +245,8 @@ def getDayOrNightLevel(i2c, currDayOrNight, twilightLevelCfg, nightLevelCfg):
         i2cOK - True only if I2C interface is working
         levelNow - current darkness level reading
         levelAvg - average darkness level reading
-        dayOrNightChanged - True on change to/from day/twilight or twilight/night
-        newDayOrNight - 'day', 'twilight', or 'night'
+        dayOrNightChanged - True if light changed from one configured level to another
+        newDayOrNight - 'day', 'day-twilight', 'night-twilight', or 'night'
     """
     i2cBuff = [0] * I2C_BUFF_SIZE
     dayOrNightChanged = False
@@ -252,11 +263,15 @@ def getDayOrNightLevel(i2c, currDayOrNight, twilightLevelCfg, nightLevelCfg):
         if levelAvg >= nightLevelCfg and not currDayOrNight == 'night':
             newDayOrNight = 'night'
             dayOrNightChanged = True
-        elif (levelAvg >= twilightLevelCfg and levelAvg < nightLevelCfg
-              and not currDayOrNight == 'twilight'):
-            newDayOrNight = 'twilight'
+        elif (levelAvg >= nightTwiLevelCfg and levelAvg < nightLevelCfg
+              and not currDayOrNight == 'night-twilight'):
+            newDayOrNight = 'night-twilight'
             dayOrNightChanged = True
-        elif levelAvg < twilightLevelCfg and not currDayOrNight == 'day':
+        elif (levelAvg >= dayTwiLevelCfg and levelAvg < nightTwiLevelCfg
+              and not currDayOrNight == 'day-twilight'):
+            newDayOrNight = 'day-twilight'
+            dayOrNightChanged = True
+        elif levelAvg < dayTwiLevelCfg and not currDayOrNight == 'day':
             newDayOrNight = 'day'
             dayOrNightChanged = True
         if dayOrNightChanged:
@@ -383,8 +398,20 @@ if __name__ == '__main__':
         logging.info(f'{timestamp()} ERROR: Cannot find config file \'{dayMotionCfgFilePath}\'.'
                      f'  Quitting.')
         _exit(1)
+    if not path.exists(dayTwiMotionCfgFilePath):
+        logging.info(f'{timestamp()} ERROR: Cannot find config file \'{dayTwiMotionCfgFilePath}\'.'
+                     f'  Quitting.')
+        _exit(1)
+    if not path.exists(nightTwiMotionCfgFilePath):
+        logging.info(f'{timestamp()} ERROR: Cannot find config file \'{nightTwiMotionCfgFilePath}\'.'
+                     f'  Quitting.')
+        _exit(1)
     if not path.exists(nightMotionCfgFilePath):
         logging.info(f'{timestamp()} ERROR: Cannot find config file \'{nightMotionCfgFilePath}\'.'
+                     f'  Quitting.')
+        _exit(1)
+    if not path.exists(rtdataFilePath):
+        logging.info(f'{timestamp()} ERROR: Cannot find runtime data directory \'{rtdataFilePath}\'.'
                      f'  Quitting.')
         _exit(1)
     if not path.exists(captureImageDir):
@@ -398,22 +425,27 @@ if __name__ == '__main__':
     illuminationCfg = 'AUTO'    # default
 
     # Ambient darkness level that will trigger transition from daytime configuration to
-    # twilight configuration (or vice versa).  Larger values mean less light.
-    twilightLevelCfg = 60
+    # day-twilight configuration (or vice versa).  Larger values mean less light.
+    dayTwiLevelCfg = 40
+
+    # Ambient darkness level that will trigger transition from daytime configuration to
+    # night-twilight configuration (or vice versa).  Larger values mean less light.
+    nightTwiLevelCfg = 90
 
     # Ambient darkness level that will trigger transition from twiligt configuration to
     # night configuration (or vice versa).  Larger values mean less light.
     nightLevelCfg = 120
 
-    # 'DAY'   - motion detected during daytime only
-    # 'NIGHT' - motion detected during twilight or nighttime only
+    # 'DAY'   - motion detected during day or day-twilight only
+    # 'NIGHT' - motion detected during night-twilight or night only
     # 'OFF'   - motion detection always off
     # 'ON'    - motion detection always on
     motionWhenCfg = 'ON'    # default
 
     # 'DAY'   - always use motion_day.conf file
+    # 'DAYTWI' - always use motion_day_twilight.conf file
+    # 'NIGHTTWI' - always use motion_night_twilight.conf file
     # 'NIGHT' - always use motion_night.conf file
-    # 'TWILIGHT' - always use motion_twilight.conf file
     # 'AUTO'  - automatically select config file depending on ambient darkness level
     motionCfgFileSelect = 'AUTO'
 
@@ -435,8 +467,10 @@ if __name__ == '__main__':
                 configDict = json.load(configFileH)
                 if 'illumination' in configDict.keys():
                     illuminationCfg = configDict['illumination']
-                if 'twilightLevel' in configDict.keys():
-                    twilightLevelCfg = configDict['twilightLevel']
+                if 'dayTwilightLevel' in configDict.keys():
+                    dayTwiLevelCfg = configDict['dayTwilightLevel']
+                if 'nightTwilightLevel' in configDict.keys():
+                    nightTwiLevelCfg = configDict['nightTwilightLevel']
                 if 'nightLevel' in configDict.keys():
                     nightLevelCfg = configDict['nightLevel']
                 if 'motionWhen' in configDict.keys():
@@ -449,6 +483,10 @@ if __name__ == '__main__':
                     logsToKeepCfg = configDict['logsToKeep']
                 if 'statusPeriodSecs' in configDict.keys():
                     statusPeriodSecsCfg = configDict['statusPeriodSecs']
+                if 'longitude' in configDict.keys():
+                    coords['longitude'] = configDict['longitude']
+                if 'latitude' in configDict.keys():
+                    coords['latitude'] = configDict['latitude']
         except:
             logging.info(f'{timestamp()} ERROR: Exception loading {configLPRFile}.  Using defaults.')
 
@@ -486,14 +524,16 @@ if __name__ == '__main__':
         illumination = 'OFF'
         logging.info(f'{timestamp()} IR LED array is now always OFF.')
 
-    # If motion configuration file selection is 'DAY', 'TWILIGHT', or 'NIGHT' (not
-    # 'AUTO'), apply the configuration file selection now.  'AUTO' will be handled
-    # in the main loop.
+    # If motion configuration file selection is 'DAY', 'DAYTWI', 'NIGHTTWI', 
+    # or 'NIGHT' (i.e. not 'AUTO'), apply the configuration file selection now.
+    # 'AUTO' will be handled in the main loop.
     motionCfgFilePath = dayMotionCfgFilePath
     if motionCfgFileSelect == 'DAY':
         motionCfgFilePath = dayMotionCfgFilePath
-    elif motionCfgFileSelect == 'TWILIGHT':
-        motionCfgFilePath = twilightMotionCfgFilePath
+    elif motionCfgFileSelect == 'DAYTWI':
+        motionCfgFilePath = twi1MotionCfgFilePath
+    elif motionCfgFileSelect == 'NIGHTTWI':
+        motionCfgFilePath = twi2MotionCfgFilePath
     elif motionCfgFileSelect == 'NIGHT':
         motionCfgFilePath = nightMotionCfgFilePath
 
@@ -522,31 +562,36 @@ if __name__ == '__main__':
             GPIO.output(PIN_RUNNING, 0)
             time.sleep(0.3)
 
-            # Select configuration file based on whether it is day, twilight, or night.
-            # If the light meter (via I2C interface) is available, use the light level
-            # to determine day, twilight, or night.  Otherwise, use the time of day.
-            # If based on time of day, extend day by 0.2 hours of twilight.
+            # Select configuration file based on whether it is day, day-twilight, 
+            # night-twilight, or night.  If the light meter (via I2C interface) is 
+            # available, use the light level to determine day, day-twilight, 
+            # night-twilight, or night.  Otherwise, use the time of day to determine
+            # if it is simply day or night.  If based on time of day, extend day by 
+            # 0.2 hours of twilight.
             if i2cOK:
                 (i2cOK, levelNow, levelAvg, dayOrNightChanged, dayOrNightNow) = (
-                    getDayOrNightLevel(i2c, dayOrNightNow, twilightLevelCfg, nightLevelCfg) )
+                    getDayOrNightLevel(i2c, dayOrNightNow, dayTwiLevelCfg, 
+                    nightTwiLevelCfg, nightLevelCfg) )
             if not i2cOK:
                 (dayOrNightChanged, dayOrNightNow) = getDayOrNight(coords, dayOrNightNow, 0.2)
             if dayOrNightNow == 'night' and motionCfgFileSelect == 'AUTO':
                 motionCfgFilePath = nightMotionCfgFilePath
-            elif dayOrNightNow == 'twilight' and motionCfgFileSelect == 'AUTO':
-                motionCfgFilePath = twilightMotionCfgFilePath
+            elif dayOrNightNow == 'day-twilight' and motionCfgFileSelect == 'AUTO':
+                motionCfgFilePath = dayTwiMotionCfgFilePath
+            elif dayOrNightNow == 'night-twilight' and motionCfgFileSelect == 'AUTO':
+                motionCfgFilePath = nightTwiMotionCfgFilePath
             elif dayOrNightNow == 'day' and motionCfgFileSelect == 'AUTO':
                 motionCfgFilePath = dayMotionCfgFilePath
 
             # Determine the IR LED array and IR-cut filter settings and apply them if
             # not already applied.
-            if dayOrNightNow == 'night' or dayOrNightNow == 'twilight':
+            if dayOrNightNow == 'night' or dayOrNightNow == 'night-twilight':
                 if illuminationCfg == 'AUTO' and illumination == 'OFF':
                     GPIO.output(PIN_IR_LED_ON, 1)
                     GPIO.output(PIN_IR_CUT_OFF, 0)
                     illumination = 'ON'
                     logging.info(f'{timestamp()} IR LED array is now ON.')
-            elif dayOrNightNow == 'day':
+            elif dayOrNightNow == 'day' or dayOrNightNow == 'day-twilight':
                 if illuminationCfg == 'AUTO' and illumination == 'ON':
                     GPIO.output(PIN_IR_LED_ON, 0)
                     GPIO.output(PIN_IR_CUT_OFF, 1)
@@ -556,12 +601,14 @@ if __name__ == '__main__':
             # Determine if motion capture should be enabled or disabled.
             motionDisabled = False
             motionOnStr = 'ON'
-            if motionWhenCfg == 'NIGHT' and dayOrNightNow == 'day':
+            if (motionWhenCfg == 'NIGHT' and
+                (dayOrNightNow == 'day' or dayOrNightNow == 'day-twilight')):
                 motionDisabled = True
-                motionOnStr = 'OFF (for day)'
-            elif motionWhenCfg == 'DAY' and (dayOrNightNow == 'night' or dayOrNightNow == 'twilight'):
+                motionOnStr = 'OFF (for day or day-twilight)'
+            elif (motionWhenCfg == 'DAY' and
+                  (dayOrNightNow == 'night' or dayOrNightNow == 'night-twilight')):
                 motionDisabled = True
-                motionOnStr = 'OFF (for night or twilight)'
+                motionOnStr = 'OFF (for night or night-twilight)'
             elif motionWhenCfg == 'OFF':
                 motionDisabled = True
                 motionOnStr = 'OFF (always)'
@@ -639,7 +686,8 @@ if __name__ == '__main__':
                 runningTimeSecs = time.time() - startTime
                 pctDiskUsed = getDiskPctUsed()
                 (i2cOK, levelNow, levelAvg, dayOrNightChanged, dayOrNightNow) = (
-                    getDayOrNightLevel(i2c, dayOrNightNow, twilightLevelCfg, nightLevelCfg) )
+                    getDayOrNightLevel(i2c, dayOrNightNow, dayTwiLevelCfg,
+                                       nightTwiLevelCfg, nightLevelCfg) )
                 runningTimeStr = str(timedelta(seconds=runningTimeSecs)).split('.')[0]
                 logging.info(f'{timestamp()} Status report:')
                 logging.info(f'  {numImageFiles} saved image files'
