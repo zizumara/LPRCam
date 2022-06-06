@@ -1,8 +1,10 @@
 # LPRCam
 ![Installed Camera](installed1.jpg)
 
+(2022-06-06 NOTE: UCTronics has modified the design of the Arducam 12.3 MP HQ camera with automatic IR-cut filter.  The new design requires the Bullseye O/S to be used, and the IR-cut filter interface now works differently.  This project requires modifications in order to work with the new camera.  Stay tuned for future changes.)
+
 This project includes the software and hardware design for a DIY motion-activated Raspberry Pi security camera.  The Linux Motion application is used to detect motion and capture images.  The following hardware is used for this project:
-* Raspberry Pi Zero W
+* Raspberry Pi Zero W running Buster O/S
 * Pi Zero W 6" camera ribbon cable (Amazon)
 * Raspberry Pi 4 (for web server)
 * Arducam 12.3 MP HQ camera with automatic IR-cut filter (www.arducam.com) -- photocell removed
