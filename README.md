@@ -42,7 +42,8 @@ During operation, captured files are periodically copied from the Pi Zero W to t
 
 ![Web Page](web-sample.png)
 
-For each captured image, a thumbnail is displayed with the date and time of capture and the lighting level at the bottom in format s###, where s is 'd' for day, 't' for twilight, and 'n' for night, and the 3-digit number represents the value read from the light sensor.  If a plate is detected by OpenALPR, the highest confidence plate number result is displayed below the capture date, along with the best confidence level of the optical character recognition (OCR) algorithm (0-100%).  A question mark (?) follows the plate number as a signal that this is the best guess by OpenALPR.  Users may click on any thumbnail to display the full resolution image on a new page.  On this page, the user may enter the actual license plate number so that it may be displayed on the main page in green followed by the text "** verified **".
+For each captured image, a thumbnail is displayed with the date and time of capture and the lighting level at the bottom in format s###, where s is 'd' for day, 't' for day-twilight, 'u' for night-twilight, and 
+'n' for night, and the 3-digit number represents the value read from the light sensor.  If a plate is detected by OpenALPR, the highest confidence plate number result is displayed below the capture date, along with the best confidence level of the optical character recognition (OCR) algorithm (0-100%).  A question mark (?) follows the plate number as a signal that this is the best guess by OpenALPR.  Users may click on any thumbnail to display the full resolution image on a new page.  On this page, the user may enter the actual license plate number so that it may be displayed on the main page in green followed by the text "** verified **".
 
 The top of the main page has a filter section which may be used to limit the number of images displayed.
 
